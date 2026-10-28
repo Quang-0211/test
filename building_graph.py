@@ -24,7 +24,7 @@ def dependency_relation_id(label):
 # model = RobertaModel.from_pretrained("roberta-base")
 # tokenizer = RobertaTokenizer.from_pretrained("roberta-base", do_lower_case=False)
 model = RobertaModel.from_pretrained("./roberta-base/")
-tokenizer = RobertaTokenizer("./roberta-base/vocab.json", "./roberta-base/merges.txt", use_fast=False)
+tokenizer = RobertaTokenizer.from_pretrained("./roberta-base/")
 vocab_size = len(tokenizer)
 
 def build_graph(json_texts, device=None):
