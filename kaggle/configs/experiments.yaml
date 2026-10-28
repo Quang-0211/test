@@ -1,0 +1,10 @@
+experiments:
+  A0: {model: gcn, add_reverse: 0, use_labels: 0, num_bases: 8}
+  A1: {model: gcn, add_reverse: 1, use_labels: 0, num_bases: 8}
+  B0: {model: rgcn, add_reverse: 0, use_labels: 0, num_bases: 8}
+  B1: {model: rgcn, add_reverse: 0, use_labels: 1, num_bases: 8}
+  B2: {model: rgcn, add_reverse: 1, use_labels: 1, num_bases: 8}
+  C1: {model: gcn, add_reverse: 1, use_labels: 0, num_bases: 8}
+  D4: {model: rgcn, add_reverse: 1, use_labels: 1, num_bases: 4}
+  D8: {model: rgcn, add_reverse: 1, use_labels: 1, num_bases: 8}
+  D16: {model: rgcn, add_reverse: 1, use_labels: 1, num_bases: 16}

@@ -1,43 +1,49 @@
 import argparse
 import json
+import os
+
 import torch
-from building_graph import build_graph
 from torch_geometric.data import Data
-from model.GCN2 import GCN2
 
-parser = argparse.ArgumentParser()
+from building_graph import NUM_DEP, build_graph
+from model.factory import create_model
 
-text = parser.add_argument('--text', type=str, required=True)
-dataset = parser.add_argument('--dataset', choices = ['hc3', 'gpt3.5'], default='hc3')
-seed = parser.add_argument('--seed', choices = ['2021', '2022', '2023', '2024', '2025'], default='2024')
 
-args = parser.parse_args()
-
-def detect(text, dataset, seed):
-    json_texts = json.dumps({"text": text, "label": ""})
-    all_token_embeddings, edge_index, y = build_graph(json_texts)
-
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) 
+def detect(text, dataset="hc3", seed=2024, model_name="gcn",
+           out_dir=None, num_bases=8, add_reverse=0, use_labels=1):
+    out_dir = out_dir or os.environ.get("PRDETECT_OUT_DIR", "/kaggle/working/model")
+    record = json.dumps({"text": text, "label": ""})
+    embeddings, edges, labels, edge_types = build_graph([record])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    input_dim = 768  # 输入维度
-    hidden_dim = 256  # 隐藏层维度
-    output_dim = 64  # 输出类别数
-    gcnmodel = GCN2(input_dim, hidden_dim, output_dim).to(device)
-    gcnmodel.load_state_dict(torch.load(f'./model/{dataset}_gcn_model_{seed}.pth'))
-    gcnmodel.eval()
-    data = Data(x=all_token_embeddings, edge_index=edge_index, y=y).to(device)
-    outputs = gcnmodel(data)
-    probability = outputs.item()
-    prediction = (outputs >= 0.5).long()
-    return probability, prediction
+    model = create_model(model_name, num_bases=num_bases, num_relations=2 * NUM_DEP).to(device)
+    suffix = "gcn" if model_name == "gcn" else "rgcn"
+    model.load_state_dict(torch.load(
+        os.path.join(out_dir, f"{dataset}_{suffix}_model_{seed}.pth"),
+        map_location=device,
+    ))
+    kwargs = {"x": embeddings[0], "edge_index": edges[0]}
+    if model_name == "rgcn":
+        edge_type = edge_types[0]
+        if not use_labels:
+            edge_type = edge_type.clone().zero_()
+        if add_reverse:
+            kwargs["edge_index"] = torch.cat((edges[0], edges[0].flip(0)), dim=1)
+            edge_type = torch.cat((edge_type, edge_type + NUM_DEP))
+        keep = kwargs["edge_index"][0] != kwargs["edge_index"][1]
+        kwargs["edge_index"] = kwargs["edge_index"][:, keep]
+        kwargs["edge_type"] = edge_type[keep]
+    model.eval()
+    with torch.no_grad():
+        probability = model(Data(**kwargs).to(device)).item()
+    return probability, int(probability >= 0.5)
 
-print(detect(args.text,args.dataset,args.seed))
 
-
-
-
-
-
-
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--text", required=True)
+    parser.add_argument("--dataset", default="hc3")
+    parser.add_argument("--seed", type=int, default=2024)
+    parser.add_argument("--model", choices=("gcn", "rgcn"), default="gcn")
+    parser.add_argument("--out_dir", default=os.environ.get("PRDETECT_OUT_DIR", "/kaggle/working/model"))
+    args = parser.parse_args()
+    print(detect(args.text, args.dataset, args.seed, args.model, args.out_dir))
